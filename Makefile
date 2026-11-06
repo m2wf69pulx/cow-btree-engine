@@ -2,7 +2,7 @@ CC ?= cc
 CFLAGS ?= -std=c99 -O2 -g -Wall -Wextra -Werror -D_POSIX_C_SOURCE=200809L
 LDFLAGS ?=
 
-SRC := src/page.c src/tree.c src/main.c
+SRC := src/page.c src/cache/cache.c src/tree.c src/main.c
 OBJ := $(SRC:.c=.o)
 BIN := build/cowbt
 
@@ -14,7 +14,7 @@ $(BIN): $(OBJ) | build
 build:
 	mkdir -p build
 
-%.o: %.c include/cowbt.h | build
+%.o: %.c include/cowbt.h src/cache/cache.h | build
 	$(CC) $(CFLAGS) -Iinclude -c -o $@ $<
 
 check: $(BIN)
