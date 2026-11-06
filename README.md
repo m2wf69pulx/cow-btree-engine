@@ -40,8 +40,9 @@ make check      # selftest plus 6 fork-based crash rounds
 ```
 
 `make check` covers: insert/lookup/overwrite, sorted iteration and range
-seeking, invisibility of uncommitted puts after reopen, recovery from a
-deliberately torn page, and repeated truncation-based crashes.
+seeking, cache hits on repeated reads, invisibility of uncommitted puts after
+reopen, recovery from a deliberately torn page, and repeated truncation-based
+crashes.
 
 ## Usage
 
@@ -61,8 +62,17 @@ Exit codes: `0` success, `1` missing key or usage error, `2` failure.
 
 - `include/cowbt.h` - page kinds, public API, invariants.
 - `src/page.c` - page encoding, CRC32, positional I/O, page allocation.
+- `src/cache/cache.c` - direct-mapped cache of verified pages, hit counters.
 - `src/tree.c` - COW insert, lookup, cursor, superblock recovery, verify.
 - `src/main.c` - CLI, self tests, crash harness.
+
+## Read path cache
+
+`bt_get` and the cursor consult a 64-slot direct-mapped cache of pages that
+already passed CRC verification. It is safe without invalidation because a
+reachable page is never rewritten: writes allocate new page ids and the old
+ids keep their bytes. Misses fall back to `pread`, `verify` always reads from
+the file, and `stats` reports hit/miss counters.
 
 ## Concurrency
 

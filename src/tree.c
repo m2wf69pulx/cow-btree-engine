@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 
+#include "cache/cache.h"
 #include "cowbt.h"
 
 #define SUPER_MAGIC_OFF 8u
@@ -108,9 +109,16 @@ int bt_open(bt_db *db, const char *path, int writable)
     int rc;
 
     memset(db, 0, sizeof *db);
+    db->cache = cache_new();
+    if (!db->cache)
+        return -ENOMEM;
     db->fd = open(path, (writable ? O_RDWR | O_CREAT : O_RDONLY), 0644);
-    if (db->fd < 0)
-        return -errno;
+    if (db->fd < 0) {
+        int err = -errno;
+        cache_free(db->cache);
+        db->cache = NULL;
+        return err;
+    }
     if (flock(db->fd, (writable ? LOCK_EX : LOCK_SH) | LOCK_NB) != 0) {
         rc = -errno;
         close(db->fd);
@@ -185,6 +193,8 @@ int bt_close(bt_db *db)
             rc = -errno;
         db->fd = -1;
     }
+    cache_free(db->cache);
+    db->cache = NULL;
     return rc;
 }
 
@@ -421,7 +431,7 @@ int bt_get(bt_db *db, uint32_t key, uint32_t *val)
     int rc;
 
     for (int depth = 0; depth <= (int)BT_MAX_DEPTH; depth++) {
-        rc = pg_read(db, id, &p);
+        rc = cache_read(db, id, &p);
         if (rc)
             return rc;
         if (pg_kind(&p) == BT_LEAF) {
@@ -597,7 +607,7 @@ int bt_scan_init(bt_cursor *c, bt_db *db, uint32_t from)
 
     for (;;) {
         uint32_t id = c->page[c->depth];
-        rc = pg_read(db, id, &p);
+        rc = cache_read(db, id, &p);
         if (rc)
             return rc;
         if (pg_kind(&p) == BT_LEAF) {
@@ -629,7 +639,7 @@ int bt_scan_next(bt_cursor *c)
 
     while (c->depth >= 0) {
         uint32_t id = c->page[c->depth];
-        rc = pg_read(c->db, id, &p);
+        rc = cache_read(c->db, id, &p);
         if (rc)
             return rc;
         if (pg_kind(&p) == BT_LEAF) {
