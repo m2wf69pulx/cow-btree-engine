@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "cache/cache.h"
 #include "cowbt.h"
 
 static const char *msgs[] = {
@@ -137,9 +138,13 @@ static int cmd_stats(const char *path)
 
     if (rc)
         return fail("open", rc);
+    uint64_t hits = 0, misses = 0;
+
     rc = bt_count(&db, &n);
-    printf("generation=%u root=%u pages=%u keys=%u page_size=%u\n",
-           db.generation, db.root, db.high_water, n, BT_PAGE_SIZE);
+    cache_counters(db.cache, &hits, &misses);
+    printf("generation=%u root=%u pages=%u keys=%u page_size=%u cache_hits=%llu cache_misses=%llu\n",
+           db.generation, db.root, db.high_water, n, BT_PAGE_SIZE,
+           (unsigned long long)hits, (unsigned long long)misses);
     bt_close(&db);
     return rc ? fail("count", rc) : 0;
 }
@@ -325,6 +330,21 @@ static int cmd_selftest(const char *path)
         rc = BT_ECORRUPT;
     if (rc)
         return fail("scan", rc);
+
+    /* Repeated lookups must hit the page cache. */
+    rc = bt_open(&db, path, 0);
+    if (rc)
+        return fail("open", rc);
+    uint64_t hits0 = 0, hits1 = 0, misses = 0;
+    cache_counters(db.cache, &hits0, &misses);
+    for (int i = 0; i < 3 && !rc; i++)
+        rc = bt_get(&db, 42, &v);
+    cache_counters(db.cache, &hits1, &misses);
+    bt_close(&db);
+    if (!rc && hits1 <= hits0)
+        rc = BT_ECORRUPT;
+    if (rc)
+        return fail("cache", rc);
 
     printf("selftest ok\n");
     return 0;
