@@ -40,12 +40,15 @@ typedef struct {
     unsigned char raw[BT_PAGE_SIZE];
 } bt_page;
 
+struct bt_cache;
+
 typedef struct {
     int fd;
     uint32_t root;
     uint32_t generation;
     uint32_t high_water;
     uint32_t slot;
+    struct bt_cache *cache;
     int writable;
 } bt_db;
 
